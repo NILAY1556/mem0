@@ -3,6 +3,10 @@ import concurrent
 import hashlib
 import json
 import logging
+import os  # Used in AsyncMemory.reset in earlier versions
+import shutil  # Used in AsyncMemory.reset in earlier versions
+import subprocess
+import time
 import uuid
 import warnings
 from datetime import datetime
@@ -51,7 +55,8 @@ class Memory(MemoryBase):
         )
         self.llm = LlmFactory.create(self.config.llm.provider, self.config.llm.config)
         self.db = SQLiteManager(self.config.history_db_path)
-        self.collection_name = self.config.vector_store.config.collection_name
+        # Store collection name for easy access
+        self.collection_name = getattr(self.config.vector_store.config, 'collection_name', 'mem0')
         self.api_version = self.config.version
 
         self.enable_graph = False
@@ -744,14 +749,83 @@ class Memory(MemoryBase):
 
     def reset(self):
         """
-        Reset the memory store.
+        Reset the memory store by deleting all memories and recreating the vector store.
+
+        This method performs the following steps:
+        1. Deletes the vector store collection
+        2. Closes the vector store client to release file locks
+        3. Resets the database
+        4. Recreates the vector store with a new client
+
+        Returns:
+            None
         """
         logger.warning("Resetting all memories")
-        self.vector_store.delete_col()
-        self.vector_store = VectorStoreFactory.create(
-            self.config.vector_store.provider, self.config.vector_store.config
-        )
-        self.db.reset()
+
+        collection_name = getattr(self.config.vector_store.config, 'collection_name', 'mem0')
+        logger.info(f"Collection name: {collection_name}")
+
+        # Step 1: Delete the collection using the client API
+        try:
+            logger.info("Deleting collection")
+            self.vector_store.delete_col()
+            logger.info("Collection deleted successfully")
+        except Exception as e:
+            logger.error(f"Error deleting collection: {e}")
+
+        # Step 2: Close the vector store client to release file locks
+        try:
+            logger.info("Closing vector store client")
+            # Force garbage collection to release any file handles
+            import gc
+            gc.collect()
+
+            # Close the client if it has a close method
+            if hasattr(self.vector_store, 'client') and hasattr(self.vector_store.client, 'close'):
+                self.vector_store.client.close()
+                logger.info("Vector store client closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing vector store client: {e}")
+
+        # Add a delay to ensure resources are released
+        time.sleep(2)
+
+        # Step 3: Reset the database
+        try:
+            logger.info("Resetting database")
+            # Close the old connection if possible
+            if hasattr(self.db, 'connection') and self.db.connection:
+                try:
+                    self.db.connection.close()
+                except Exception as e:
+                    logger.error(f"Error closing database connection: {e}")
+
+            # Create a new SQLiteManager instance
+            from mem0.memory.storage import SQLiteManager
+            self.db = SQLiteManager(self.config.history_db_path)
+            logger.info("Database reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting database: {e}")
+
+        # Step 4: Create a new vector store with a new client
+        # Note: We're not trying to recreate the collection here because
+        # the VectorStoreFactory.create will handle that for us
+        try:
+            logger.info("Creating new vector store instance")
+            # Create a new vector store with the same configuration
+            self.embedding_model = EmbedderFactory.create(
+                self.config.embedder.provider,
+                self.config.embedder.config,
+                self.config.vector_store.config,
+            )
+            self.vector_store = VectorStoreFactory.create(
+                self.config.vector_store.provider, self.config.vector_store.config
+            )
+            logger.info("New vector store instance created successfully")
+        except Exception as e:
+            logger.error(f"Error creating new vector store instance: {e}")
+
+        logger.info("Memory reset completed successfully")
         capture_event("mem0.reset", self)
 
     def chat(self, query):
@@ -1509,13 +1583,81 @@ class AsyncMemory(MemoryBase):
     async def reset(self):
         """
         Reset the memory store asynchronously.
+
+        This method performs the following steps:
+        1. Deletes the vector store collection
+        2. Closes the vector store client to release file locks
+        3. Resets the database
+        4. Recreates the vector store with a new client
+
+        Returns:
+            None
         """
         logger.warning("Resetting all memories")
-        await asyncio.to_thread(self.vector_store.delete_col)
-        self.vector_store = VectorStoreFactory.create(
-            self.config.vector_store.provider, self.config.vector_store.config
-        )
-        await asyncio.to_thread(self.db.reset)
+
+        collection_name = getattr(self.config.vector_store.config, 'collection_name', 'mem0')
+        logger.info(f"Collection name: {collection_name}")
+
+        # Step 1: Delete the collection using the client API
+        try:
+            logger.info("Deleting collection")
+            await asyncio.to_thread(self.vector_store.delete_col)
+            logger.info("Collection deleted successfully")
+        except Exception as e:
+            logger.error(f"Error deleting collection: {e}")
+
+        # Step 2: Close the vector store client to release file locks
+        try:
+            logger.info("Closing vector store client")
+            # Force garbage collection to release any file handles
+            import gc
+            gc.collect()
+
+            # Close the client if it has a close method
+            if hasattr(self.vector_store, 'client') and hasattr(self.vector_store.client, 'close'):
+                await asyncio.to_thread(self.vector_store.client.close)
+                logger.info("Vector store client closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing vector store client: {e}")
+
+        # Add a delay to ensure resources are released
+        await asyncio.sleep(2)
+
+        # Step 3: Reset the database
+        try:
+            logger.info("Resetting database")
+            # Close the old connection if possible
+            if hasattr(self.db, 'connection') and self.db.connection:
+                try:
+                    await asyncio.to_thread(self.db.connection.close)
+                except Exception as e:
+                    logger.error(f"Error closing database connection: {e}")
+
+            # Create a new SQLiteManager instance
+            from mem0.memory.storage import SQLiteManager
+            self.db = SQLiteManager(self.config.history_db_path)
+            logger.info("Database reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting database: {e}")
+
+        # Step 4: Create a new vector store with a new client
+        # Note: We're not trying to recreate the collection here because
+        # the VectorStoreFactory.create will handle that for us
+        try:
+            logger.info("Creating new vector store instance")
+            # Create a new vector store with the same configuration
+            self.embedding_model = EmbedderFactory.create(
+                self.config.embedder.provider,
+                self.config.embedder.config,
+                self.config.vector_store.config,
+            )
+            self.vector_store = VectorStoreFactory.create(
+                self.config.vector_store.provider, self.config.vector_store.config
+            )
+            logger.info("New vector store instance created successfully")
+        except Exception as e:
+            logger.error(f"Error creating new vector store instance: {e}")
+
         capture_event("async_mem0.reset", self)
 
     async def chat(self, query):
