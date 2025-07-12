@@ -5,11 +5,14 @@ SETUP INSTRUCTIONS:
 1. Install vLLM:
    pip install vllm
 
-2. Start vLLM server (in a separate terminal):
-   vllm serve microsoft/DialoGPT-small --port 8000
+2. Start vLLM servers (in separate terminals):
+   # For LLM (text generation)
+   vllm serve Qwen/Qwen2.5-32B-Instruct --port 8000
+
+   # For embeddings (optional - uses vLLM embeddings)
+   vllm serve intfloat/e5-mistral-7b-instruct --task embed --port 8001
 
    Wait for the message: "Uvicorn running on http://0.0.0.0:8000"
-   (Small model: ~500MB download, much faster!)
 
 3. Verify server is running:
    curl http://localhost:8000/health
@@ -37,9 +40,10 @@ config = {
         }
     },
     "embedder": {
-        "provider": "openai",
+        "provider": "vllm",
         "config": {
-            "model": "text-embedding-3-small"
+            "model": "intfloat/e5-mistral-7b-instruct",
+            "vllm_base_url": "http://localhost:8001/v1"  # Different port for embeddings
         }
     },
     "vector_store": {

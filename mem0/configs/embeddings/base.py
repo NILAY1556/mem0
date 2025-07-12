@@ -33,6 +33,8 @@ class BaseEmbedderConfig(ABC):
         memory_search_embedding_type: Optional[str] = None,
         # LM Studio specific
         lmstudio_base_url: Optional[str] = "http://localhost:1234/v1",
+        # vLLM specific
+        vllm_base_url: Optional[str] = None,
         # AWS Bedrock specific
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
@@ -69,6 +71,8 @@ class BaseEmbedderConfig(ABC):
         :type memory_search_embedding_type: Optional[str], optional
         :param lmstudio_base_url: LM Studio base URL to be use, defaults to "http://localhost:1234/v1"
         :type lmstudio_base_url: Optional[str], optional
+        :param vllm_base_url: vLLM base URL to be use, defaults to None
+        :type vllm_base_url: Optional[str], optional
         """
 
         self.model = model
@@ -96,6 +100,9 @@ class BaseEmbedderConfig(ABC):
 
         # LM Studio specific
         self.lmstudio_base_url = lmstudio_base_url
+
+        # vLLM specific
+        self.vllm_base_url = vllm_base_url
 
         # AWS Bedrock specific
         self.aws_access_key_id = aws_access_key_id
