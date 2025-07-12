@@ -1,10 +1,7 @@
 import os
 from typing import Literal, Optional
 
-try:
-    from openai import OpenAI
-except ImportError:
-    raise ImportError("The 'openai' library is required for vLLM embeddings. Please install it using 'pip install openai'.")
+from openai import OpenAI
 
 from mem0.configs.embeddings.base import BaseEmbedderConfig
 from mem0.embeddings.base import EmbeddingBase

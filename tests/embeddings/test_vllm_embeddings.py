@@ -39,16 +39,13 @@ def test_vllm_embedding_embed(mock_vllm_client):
     )
     embedder = VllmEmbedding(config)
     
-    # Mock the response
     mock_response = Mock()
     mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3, 0.4])]
     mock_vllm_client.embeddings.create.return_value = mock_response
     
-    # Test embedding
     text = "Hello, world!"
     result = embedder.embed(text)
     
-    # Verify the call
     mock_vllm_client.embeddings.create.assert_called_once_with(
         input=["Hello, world!"],
         model="intfloat/e5-mistral-7b-instruct"
@@ -62,16 +59,13 @@ def test_vllm_embedding_text_preprocessing(mock_vllm_client):
     config = BaseEmbedderConfig(model="intfloat/e5-mistral-7b-instruct")
     embedder = VllmEmbedding(config)
     
-    # Mock the response
     mock_response = Mock()
     mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3, 0.4])]
     mock_vllm_client.embeddings.create.return_value = mock_response
     
-    # Test with text containing newlines
     text = "Hello,\nworld!"
     embedder.embed(text)
     
-    # Verify newlines are replaced with spaces
     mock_vllm_client.embeddings.create.assert_called_once_with(
         input=["Hello, world!"],
         model="intfloat/e5-mistral-7b-instruct"
